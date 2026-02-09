@@ -1,19 +1,19 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const connectToDatabase = require('../models/db');
+const connectToDatabase = require("../models/db");
 
 // Search for secondChanceItems
-router.get('/', async (req, res, next) => {
+router.get("/", async (req, res, next) => {
     try {
-        // Task 1: Connect to MongoDB
+    // Task 1: Connect to MongoDB
         const db = await connectToDatabase();
         const collection = db.collection("secondChanceItems");
 
         // Initialize the query object
-        let query = {};
+        const query = {};
 
         // Task 2: Add the name filter if the name parameter exists and is not empty
-        if (req.query.name && req.query.name.trim() !== '') {
+        if (req.query.name && req.query.name.trim() !== "") {
             query.name = { $regex: req.query.name.trim(), $options: "i" }; // Partial match, case-insensitive
         }
 

@@ -22,5 +22,8 @@ module.exports = {
     ecmaVersion: 'latest'
   },
   rules: {
-  }
+    semi: ['error', 'always'], // allow semicolons
+    indent: ['error', 4],      // use 4 spaces
+    quotes: ['error', 'double'] // double quotes instead of single
+  }  
 }
