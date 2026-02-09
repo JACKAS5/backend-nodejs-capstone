@@ -2,15 +2,24 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const pinoLogger = require('./logger');
 
 const connectToDatabase = require('./models/db');
-const {loadData} = require("./util/import-mongo/index");
-
+const { loadData } = require("./util/import-mongo/index");
 
 const app = express();
-app.use("*",cors());
 const port = 3060;
+
+// Enable CORS for all routes and origins, including pre-flight requests
+app.use(cors());
+app.options('*', cors());
+
+// Serve images from uploads/images folder
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
+
+// Parse JSON request bodies
+app.use(express.json());
 
 // Connect to MongoDB; we just do this one time
 connectToDatabase().then(async (db) => {
@@ -41,6 +50,10 @@ const logger = require('./logger');
 app.use(pinoHttp({ logger }));
 
 // Use Routes
+
+// Serve images from the uploads/images folder
+app.use('/images', express.static(path.join(__dirname, 'uploads/images')));
+
 // authRoutes Step 2: add the authRoutes and to the server by using the app.use() method.
 app.use('/api/auth', authRoutes);
 

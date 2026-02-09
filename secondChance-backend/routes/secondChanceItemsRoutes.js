@@ -1,13 +1,22 @@
+/*jshint esversion: 8 */
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const router = express.Router();
 const connectToDatabase = require('../models/db');
-const logger = require('../logger');
+const pino = require('pino');
+
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 // Define the upload directory path
-const directoryPath = 'public/images';
+const directoryPath = path.join(__dirname, '../public/images');
+
+// Make sure the directory exists
+if (!fs.existsSync(directoryPath)) {
+    fs.mkdirSync(directoryPath, { recursive: true });
+    logger.info(`Created folder: ${directoryPath}`);
+}
 
 // Set up storage for uploaded files
 const storage = multer.diskStorage({
@@ -21,13 +30,12 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-
 // Get all secondChanceItems
 router.get('/', async (req, res, next) => {
     logger.info('/ called');
     try {
         // 1 Connect to database
-        const db = await connectToDatabase()
+        const db = await connectToDatabase();
 
         // 2 Get collection
         const collection = db.collection("secondChanceItems");
@@ -36,22 +44,22 @@ router.get('/', async (req, res, next) => {
         const secondChanceItems = await collection.find({}).toArray();
 
         // 4 Return as JSON
+        logger.info(`Fetched ${secondChanceItems.length} items`);
         res.json(secondChanceItems);
 
-    } catch (e) {
-        logger.console.error('oops something went wrong', e)
-        next(e);
+    } catch (error) {
+        logger.error({ error }, 'oops something went wrong');
+        next(error);
     }
 });
 
 // Add a new item
 router.post('/', upload.single('image'), async(req, res,next) => {
     try {
-
         // 1 Connect to database
         const db = await connectToDatabase();
 
-        // 2 Get all collection
+        // 2 Get collection
         const collection = db.collection('secondChanceItems');
 
         // 3 Create new item from request body
@@ -63,7 +71,6 @@ router.post('/', upload.single('image'), async(req, res,next) => {
             .sort({ id: -1 })
             .limit(1)
             .toArray();
-
         const lastId = lastItem.length > 0 ? parseInt(lastItem[0].id) : 0;
         newItem.id = (lastId + 1).toString();
 
@@ -73,16 +80,20 @@ router.post('/', upload.single('image'), async(req, res,next) => {
         // 6 Handle image upload
         if (req.file) {
             newItem.image = `/images/${req.file.originalname}`;
+            logger.info(`Uploaded image: ${req.file.originalname}`);
+        } else {
+            newItem.image = null; // Optional placeholder if no file uploaded
         }
 
         // 7 Insert into database
         const result = await collection.insertOne(newItem);
-
         newItem._id = result.insertedId;
-        
-        res.status(201).json(secondChanceItem.ops[0]);
+
+        // 8 Return new item
+        res.status(201).json(newItem);
+
     } catch (e) {
-        logger.error('Error adding new item:', error);
+        logger.error({ e }, 'Error adding new item');
         next(e);
     }
 });
@@ -104,23 +115,24 @@ router.get('/:id', async (req, res, next) => {
 
         // 5️ If not found, return 404
         if (!secondChanceItem) {
+            logger.warn({ id }, 'secondChanceItem not found');
             return res.status(404).json({ error: "secondChanceItem not found" });
         }
 
         // 6️ Return item
+        logger.info({ secondChanceItem }, 'Item fetched successfully');
         res.json(secondChanceItem);
 
-    } catch (e) {
-        logger.error('Error fetching secondChanceItem:', error);
-        next(e);
+    } catch (error) {
+        logger.error({ error }, 'Error fetching secondChanceItem');
+        next(error);
     }
 });
 
-// Update and existing item
+// Update an existing item
 router.put('/:id', async(req, res,next) => {
+    const id = req.params.id;
     try {
-        const id = req.params.id;
-
         // 1️ Connect to database
         const db = await connectToDatabase();
 
@@ -131,6 +143,7 @@ router.put('/:id', async(req, res,next) => {
         const existingItem = await collection.findOne({ id: id });
 
         if (!existingItem) {
+            logger.warn({ id }, 'secondChanceItem not found for update');
             return res.status(404).json({ error: "secondChanceItem not found" });
         }
 
@@ -152,18 +165,21 @@ router.put('/:id', async(req, res,next) => {
 
         // 6️ Send response
         if (result.modifiedCount > 0) {
+            logger.info({ id, updatedFields }, 'Item updated successfully');
             res.json({ updated: "success" });
         } else {
+            logger.warn({ id }, 'Item update failed');
             res.json({ updated: "failed" });
         }
-    } catch (e) {
-        logger.error('Error updating secondChanceItem:', error);
-        next(e);
+    } catch (error) {
+        logger.error({ error }, 'Error updating secondChanceItem');
+        next(error);
     }
 });
 
 // Delete an existing item
 router.delete('/:id', async(req, res,next) => {
+    const id = req.params.id;
     try {
         // 1️ Connect to database
         const db = await connectToDatabase();
@@ -175,6 +191,7 @@ router.delete('/:id', async(req, res,next) => {
         const existingItem = await collection.findOne({ id: id });
 
         if (!existingItem) {
+            logger.warn({ id }, 'secondChanceItem not found for deletion');
             return res.status(404).json({ error: "secondChanceItem not found" });
         }
 
@@ -182,13 +199,15 @@ router.delete('/:id', async(req, res,next) => {
         const result = await collection.deleteOne({ id: id });
 
         if (result.deletedCount > 0) {
+            logger.info({ id }, 'Item deleted successfully');
             res.json({ deleted: "success" });
         } else {
+            logger.warn({ id }, 'Item deletion failed');
             res.json({ deleted: "failed" });
         }
-    } catch (e) {
-        logger.error('Error deleting secondChanceItem:', error);
-        next(e);
+    } catch (error) {
+        logger.error({ error }, 'Error deleting secondChanceItem');
+        next(error);
     }
 });
 
